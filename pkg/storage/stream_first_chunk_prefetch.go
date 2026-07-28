@@ -66,9 +66,6 @@ type streamFirstBatchLoader struct {
 }
 
 func newStreamFirstBatchLoader(schemas config.SchemaConfig, metrics *ChunkMetrics, fetchFn chunkFetchFunc) *streamFirstBatchLoader {
-	if fetchFn == nil {
-		fetchFn = fetchLazyChunks
-	}
 	return &streamFirstBatchLoader{schemas: schemas, metrics: metrics, fetchFn: fetchFn}
 }
 
@@ -78,7 +75,7 @@ func (l *streamFirstBatchLoader) fetch(ctx context.Context, batch []*LazyChunk) 
 	if err := l.fetchFn(ctx, l.schemas, batch); err != nil {
 		return nil, err
 	}
-	l.metrics.streamPrefetchBatchLoad.Observe(time.Since(start).Seconds())
+	l.metrics.streamOrderedBatchLoad.Observe(time.Since(start).Seconds())
 	return batch, nil
 }
 
