@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.7.5](https://github.com/grafana/loki/compare/v3.7.4...v3.7.5) (2026-07-28)
+
+
+### Bug Fixes
+
+* Build deb/rpm packages again in the release workflow ([#23598](https://github.com/grafana/loki/issues/23598)) ([6f49272](https://github.com/grafana/loki/commit/6f4927210024a9e5496fbc760837bf2fd7dbf5f1))
+* **ci:** Disable docker plugin publishing on release-3.7.x ([#23440](https://github.com/grafana/loki/issues/23440)) ([6095f71](https://github.com/grafana/loki/commit/6095f71eeba604627fbc08a4e87ed315c38d7b07))
+
 ## [3.7.4](https://github.com/grafana/loki/compare/v3.7.3...v3.7.4) (2026-07-22)
 
 
