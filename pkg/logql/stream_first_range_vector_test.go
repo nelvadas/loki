@@ -509,3 +509,82 @@ func TestStreamFirstWindowRange(t *testing.T) {
 		})
 	}
 }
+
+// BenchmarkRangeVectorIterator compares the default (timestamp-first) and stream-first range-vector
+// evaluators across a range of window / step / cardinality shapes. Sub-benchmarks are keyed by mode
+// and scenario so each shape can be compared across the two modes.
+func BenchmarkRangeVectorIterator(b *testing.B) {
+	scenarios := map[string]struct {
+		numStreams       int
+		samplesPerStream int
+		spanSeconds      int
+		interval         time.Duration
+		step             time.Duration
+		start, end       time.Time
+	}{
+		"window=2h step=30m streams=2000": {
+			numStreams:       2000,
+			samplesPerStream: 15000,
+			spanSeconds:      7200,
+			interval:         2 * time.Hour,
+			step:             30 * time.Minute,
+			start:            time.Unix(7200, 0),
+			end:              time.Unix(7200+90*60, 0),
+		},
+		"window=30m step=1m streams=2000": {
+			numStreams:       2000,
+			samplesPerStream: 8000,
+			spanSeconds:      3600,
+			interval:         30 * time.Minute,
+			step:             time.Minute,
+			start:            time.Unix(0, 0),
+			end:              time.Unix(3600, 0),
+		},
+		"window=1m step=5s streams=6000": {
+			numStreams:       6000,
+			samplesPerStream: 5000,
+			spanSeconds:      25000,
+			interval:         time.Minute,
+			step:             5 * time.Second,
+			start:            time.Unix(0, 0),
+			end:              time.Unix(25000, 0),
+		},
+	}
+
+	modes := []struct {
+		name  string
+		order logproto.SampleOrder
+	}{
+		{"timestamp-first", logproto.SAMPLE_ORDER_BY_TIMESTAMP},
+		{"stream-first", logproto.SAMPLE_ORDER_BY_STREAM},
+	}
+
+	for _, m := range modes {
+		b.Run(m.name, func(b *testing.B) {
+			for name, sc := range scenarios {
+				b.Run(name, func(b *testing.B) {
+					factory := buildLazySampleFactory(sc.numStreams, sc.samplesPerStream, sc.spanSeconds)
+					expr := &syntax.RangeAggregationExpr{
+						Operation: syntax.OpRangeTypeCount,
+						Left:      &syntax.LogRangeExpr{Interval: sc.interval},
+					}
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						it, err := newRangeVectorIterator(
+							factory(), expr,
+							sc.interval.Nanoseconds(), sc.step.Nanoseconds(),
+							sc.start.UnixNano(), sc.end.UnixNano(), 0, m.order)
+						if err != nil {
+							b.Fatal(err)
+						}
+						for it.Next() {
+							_, _ = it.At()
+						}
+						_ = it.Close()
+					}
+				})
+			}
+		})
+	}
+}
