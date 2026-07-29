@@ -233,3 +233,39 @@ stream-first source**: it presents each stream's samples in the required per-str
 populates the same stream identity and sample hash as the other sources, so it merges and deduplicates
 against ingester and chunk-store data through the exact same seam. Timestamp-first, by contrast, would
 force a data object into a global time order its layout does not provide.
+
+## Reproducing the benchmark comparison (agent prompt)
+
+The prompt below drives an AI agent to run the benchmarks and emit a timestamp-first vs stream-first
+comparison markdown file. Substitute `<source>` with `store_without_duplicates` (a single read) or
+`store_with_duplicates` (every sample duplicated, to also exercise cross-source deduplication).
+
+```text
+Run the v1-engine metric benchmarks for source <source> and write a timestamp-first vs stream-first
+comparison markdown file.
+
+1. Latency + allocations — run BenchmarkLogQLQueries over the chosen source, both modes, all
+   injected latencies, single-shot:
+
+     go test ./pkg/logql/ -run '^$' \
+       -bench 'BenchmarkLogQLQueries/mode=.*/source=<source>' \
+       -benchmem -benchtime=1x -count=1 -timeout=60m
+
+2. Peak RSS — for every query, measure the per-timestamp and per-stream leaf at latency=0s with the
+   process-isolated harness (median of 3):
+
+     go run ./tools/memory-peak-bench -pkg ./pkg/logql/ -count 3 -bench '<comma-separated leaves>'
+
+   where each leaf is:
+     BenchmarkLogQLQueries/mode=<per-timestamp|per-stream>/source=<source>/query=<name>/latency=0s
+   Build the leaf list carefully: in zsh `for q in $list` does NOT word-split — use ${=list} or bash.
+
+3. Write a markdown file with two comparison tables:
+     - Wall-clock latency, with columns 0s / 50ms / 250ms.
+     - Memory utilization at 0s artificial latency, with columns: allocated bytes (B/op),
+       allocations (allocs/op), and peak RSS.
+   One row per query. The first column describes the query's cardinality (input streams -> output
+   series); the second column is the actual LogQL query. Show each value as
+   "timestamp-first -> stream-first (delta)" where delta = (stream-first - timestamp-first) /
+   timestamp-first, so a negative delta means stream-first is better (e.g. 2x faster -> -50%).
+```
